@@ -10,7 +10,7 @@ import com.bjit.data.Alarm
 import java.util.Date
 
 class AlarmAdapter(
-    private val alarms: List<Alarm>,
+    private var alarms: List<Alarm>,
     private val onEdit: (Alarm) -> Unit,
     private val onDelete: (Alarm) -> Unit
 ) : RecyclerView.Adapter<AlarmAdapter.AlarmViewHolder>() {
@@ -26,6 +26,11 @@ class AlarmAdapter(
     }
 
     override fun getItemCount(): Int = alarms.size
+
+    fun updateAlarms(newAlarms: List<Alarm>) {
+        alarms = newAlarms
+        notifyDataSetChanged()
+    }
 
     class AlarmViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val timeTextView: TextView = itemView.findViewById(R.id.timeTextView)

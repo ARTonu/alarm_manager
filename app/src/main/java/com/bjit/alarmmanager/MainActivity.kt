@@ -3,26 +3,27 @@ package com.bjit.alarmmanager
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.app.TimePickerDialog
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.widget.Button
 import android.widget.TimePicker
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bjit.utils.AlarmManagerHelper
 import com.bjit.data.Alarm
+import com.bjit.receiver.AlarmReceiver
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
     lateinit var btnSetAlarm: Button
     lateinit var timePicker: TimePicker
     lateinit var alarmRecyclerView: RecyclerView
-    private val alarms = mutableListOf<Alarm>()
-    private val alarmAdapter = AlarmAdapter(alarms, ::onEditAlarm, ::onDeleteAlarm)
+    private val alarmViewModel: AlarmViewModel by viewModels()
+    private lateinit var alarmManagerHelper: AlarmManagerHelper
+    private val alarmAdapter = AlarmAdapter(mutableListOf(), ::onEditAlarm, ::onDeleteAlarm)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +36,7 @@ class MainActivity : AppCompatActivity() {
 
         alarmRecyclerView.layoutManager = LinearLayoutManager(this)
         alarmRecyclerView.adapter = alarmAdapter
+        alarmManagerHelper = AlarmManagerHelper(this)
 
         btnSetAlarm.setOnClickListener {
             val calendar: Calendar = Calendar.getInstance()
@@ -46,35 +48,27 @@ class MainActivity : AppCompatActivity() {
                 timePicker.minute,
                 0
             )
-            val alarm = Alarm(alarms.size, calendar.timeInMillis)
-            alarms.add(alarm)
-            alarmAdapter.notifyItemInserted(alarms.size - 1)
+            val alarm = Alarm(alarmAdapter.itemCount, calendar.timeInMillis)
+            alarmViewModel.addAlarm(alarm)
             setAlarm(calendar.timeInMillis)
+        }
+        alarmViewModel.alarms.observe(this) { alarms ->
+            alarmAdapter.updateAlarms(alarms)
         }
     }
 
     private fun setAlarm(timeInMillis: Long) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, MyAlarm::class.java)
+        val intent = Intent(this, AlarmReceiver::class.java)
         val pendingIntent =
             PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
         alarmManager.setRepeating(
-            AlarmManager.RTC,
+            AlarmManager.RTC_WAKEUP,
             timeInMillis,
             AlarmManager.INTERVAL_DAY,
             pendingIntent
         )
         Toast.makeText(this, "Alarm is set", Toast.LENGTH_SHORT).show()
-    }
-
-    private class MyAlarm : BroadcastReceiver() {
-        override fun onReceive(
-            context: Context,
-            intent: Intent
-        ) {
-            Toast.makeText(context, "Alarm is fired", Toast.LENGTH_SHORT).show()
-            Log.d("Alarm Bell", "Alarm just fired")
-        }
     }
 
     // Add onEditAlarm and onDeleteAlarm methods
@@ -83,14 +77,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onDeleteAlarm(alarm: Alarm) {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, MyAlarm::class.java)
-        val pendingIntent =
-            PendingIntent.getBroadcast(this, alarm.id, intent, PendingIntent.FLAG_IMMUTABLE)
-        alarmManager.cancel(pendingIntent)
-        alarms.remove(alarm)
-        alarmAdapter.notifyItemRemoved(alarms.indexOf(alarm))
-        Toast.makeText(this, "Alarm is deleted", Toast.LENGTH_SHORT).show()
+        alarmManagerHelper.deleteAlarm(alarm)
+        alarmViewModel.deleteAlarm(alarm)
     }
 
     private fun showTimePickerDialog(alarm: Alarm) {
@@ -101,32 +89,8 @@ class MainActivity : AppCompatActivity() {
         TimePickerDialog(this, { _, selectedHour, selectedMinute ->
             calendar.set(Calendar.HOUR_OF_DAY, selectedHour)
             calendar.set(Calendar.MINUTE, selectedMinute)
-            updateAlarm(alarm, calendar.timeInMillis)
+            alarmManagerHelper.updateAlarm(alarm, calendar.timeInMillis)
+            alarmViewModel.updateAlarm(alarm, calendar.timeInMillis)
         }, hour, minute, true).show()
-    }
-
-    private fun updateAlarm(alarm: Alarm, newTimeInMillis: Long) {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, MyAlarm::class.java)
-        val pendingIntent =
-            PendingIntent.getBroadcast(this, alarm.id, intent, PendingIntent.FLAG_IMMUTABLE)
-
-        // Cancel the existing alarm
-        alarmManager.cancel(pendingIntent)
-
-        // Update the alarm time
-        alarm.timeInMillis = newTimeInMillis
-
-        // Set the new alarm
-        alarmManager.setRepeating(
-            AlarmManager.RTC,
-            newTimeInMillis,
-            AlarmManager.INTERVAL_DAY,
-            pendingIntent
-        )
-
-        // Notify the adapter about the change
-        alarmAdapter.notifyItemChanged(alarms.indexOf(alarm))
-        Toast.makeText(this, "Alarm is updated", Toast.LENGTH_SHORT).show()
     }
 }
